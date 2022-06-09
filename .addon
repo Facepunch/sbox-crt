@@ -1,0 +1,23 @@
+{
+  "Title": "crt",
+  "Type": "game",
+  "Org": "local",
+  "Ident": "crt",
+  "Schema": 1,
+  "HasAssets": true,
+  "AssetsPath": "",
+  "ResourcePaths": null,
+  "HasCode": true,
+  "CodePath": "/code/",
+  "RootNamespace": "Sandbox",
+  "Metadata": {
+    "MapList": [],
+    "PerMapRanking": false,
+    "LeaderboardType": 0,
+    "RankType": 0,
+    "MapSelect": 4,
+    "GameNetworkType": 1,
+    "MaxPlayers": 0,
+    "MinPlayers": 0
+  }
+}

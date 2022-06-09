@@ -1,0 +1,160 @@
+
+HEADER
+{
+    CompileTargets = ( IS_SM_50 && ( PC || VULKAN ) );
+    Description = "CRT Shader for S&box";
+}
+
+FEATURES
+{
+    #include "common/features.hlsl"
+}
+
+MODES
+{
+    VrForward();
+    Depth( "vr_depth_only.vfx" );
+    ToolsVis( S_MODE_TOOLS_VIS );
+    ToolsWireframe( "vr_tools_wireframe.vfx" );
+    ToolsShadingComplexity( "vr_tools_shading_complexity.vfx" );
+}
+
+COMMON
+{
+    #include "common/shared.hlsl"
+}
+
+struct VertexInput
+{
+    #include "common/vertexinput.hlsl"
+};
+
+struct PixelInput
+{
+    #include "common/pixelinput.hlsl"
+};
+
+VS
+{
+    #include "common/vertex.hlsl"
+
+    PixelInput MainVs( INSTANCED_SHADER_PARAMS( VS_INPUT i ) )
+    {
+        PixelInput o = ProcessVertex( i );
+        return FinalizeVertex( o );
+    }
+}
+
+PS
+{
+    struct PixelOutput
+    {
+        float4 vColor : SV_Target0;
+    };
+
+    float4 g_vScreenRes< Default4( 1.0f, 1.0f, 1.0f, 1.0f ); UiGroup( "CRT" ); >;
+    float g_flBrightness< Default( 1.0f ); Range( 0.0f, 1.0f ); UiGroup( "CRT" ); >;
+    float g_flPixelBrightness< Default( 1.0f ); Range( 0.0f, 100.0f ); UiGroup( "CRT" ); >;
+    float g_flChromaticAberration< Default( 1.0f ); Range( 0.0f, 1.0f ); UiGroup( "CRT" ); >;
+    float g_flRadius< Default( 1.0f ); UiGroup( "CRT" ); >;
+    float3 g_vOrigin< Default3( 0.0f, 0.0f, 0.0f ); UiGroup( "CRT" ); >;
+    float3 g_vRight< Default3( 0.0f, 1.0f, 0.0f ); UiGroup( "CRT" ); >;
+    float3 g_vUp< Default3( 0.0f, 0.0f, 1.0f ); UiGroup( "CRT" ); >;
+
+    CreateInputTexture2D( Color, Srgb, 8, "", "_color", "CRT", Default4( 1.0f, 1.0f, 1.0f, 1.0f ) );
+    CreateTexture2D( g_tColor ) < Channel( RGBA, None( Color ), Srgb ); OutputFormat( BC7 ); SrgbRead( true ); >;
+
+    CreateInputTexture2D( PixelTexture, Srgb, 8, "", "_color", "CRT", Default4( 1.0f, 1.0f, 1.0f, 1.0f ) );
+    CreateTexture2D( g_tPixelTexture ) < Channel( RGBA, None( PixelTexture ), Srgb ); OutputFormat( BC7 ); SrgbRead( true ); >;
+
+    float3 SamplePixel( float2 uv, float fade )
+    {
+        return lerp( Tex2D( g_tPixelTexture, uv * g_vScreenRes.xy ).rgb * g_flPixelBrightness, float3( 1, 1, 1 ), fade );
+    }
+    
+    float3 FindSphereProjectionNormal( float3 v, float3 p )
+    {
+        float3 c = g_vOrigin;
+        float r = g_flRadius;
+
+        float3 diff_pv = p - v;
+        float3 diff_cv = c - v;
+
+        float qa = dot( diff_pv, diff_pv );
+        float qb = 2 * ( dot( v, diff_pv ) - dot( c, diff_pv ) );
+        float qc = dot( diff_cv, diff_cv ) - r * r;
+
+        float qd = qb * qb - 4 * qa * qc;
+  
+        float t = ( -qb - sqrt( qd ) ) / ( 2 * qa );
+
+        float3 h = v + t * diff_pv;
+
+        return qd > 0 ? normalize( h - c ) : float3( 0, 0, 0 );
+    }
+
+    float3 Sample( float3 v, float3 p )
+    {
+        float3 nml = FindSphereProjectionNormal( v, p );
+
+        float3 i = g_vRight;
+        float3 j = g_vUp;
+
+        float2 uv = float2( dot( nml, i ), dot( nml, j ) ) * g_vScreenRes.zw * 2 + float2( 0.5f, 0.5f );
+
+        float2 dx = ddx( uv ) * 128;
+        float2 dy = ddy( uv ) * 128;
+        float detail = clamp( sqrt( ( dot( dx, dx ) + dot( dy, dy ) ) ), 0, 1 );
+
+        float fade = float( uv.x >= 0 ) * float( uv.y >= 0 ) * float( uv.x <= 1 ) * float( uv.y <= 1 )
+            * float( dot( nml, nml ) > 0 ) * pow( abs( 16 * uv.x * uv.y * ( 1 - uv.x ) * ( 1 - uv.y ) ), 0.4f );
+
+        float2 mid = float2( 0.5f, 0.5f );
+
+        float2 uvR = uv;
+        float2 uvG = ( uv - mid ) * ( 1.0f + g_flChromaticAberration * 0.5f ) + mid;
+        float2 uvB = ( uv - mid ) * ( 1.0f + g_flChromaticAberration ) + mid;
+
+        float3 clr =
+            float3( Tex2D( g_tColor, uvR ).r, 0.0, 0.0 ) * SamplePixel( uvR, detail ) +
+            float3( 0.0, Tex2D( g_tColor, uvG ).g, 0.0 ) * SamplePixel( uvG, detail ) +
+            float3( 0.0, 0.0, Tex2D( g_tColor, uvB ).b ) * SamplePixel( uvB, detail );
+
+        return fade * g_flBrightness * clr * 1.5f;
+    }
+
+    float3 Samples( float3 viewPos, float3 fragPos )
+    {
+        const float3 samples[9] =
+        {
+            float3( -1, -1, 1 / 16.0 ),
+            float3( 0, -1, 1 / 8.0 ),
+            float3( 1, -1, 1 / 16.0 ),
+            float3( -1,  0, 1 / 8.0 ),
+            float3( 0,  0, 1 / 4.0 ),
+            float3( 1,  0, 1 / 8.0 ),
+            float3( -1,  1, 1 / 16.0 ),
+            float3( 0,  1, 1 / 8.0 ),
+            float3( 1,  1, 1 / 16.0 )
+        };
+
+        float3 dx = ddx( fragPos ) * 0.5f;
+        float3 dy = ddy( fragPos ) * 0.5f;
+
+        float3 clr = float3( 0, 0, 0 );
+        for ( float s = 0; s < 9; ++s )
+        {
+            float3 samp = samples[s];
+            clr += Sample( viewPos, fragPos + samp.x * dx + samp.y * dy ) * samp.z;
+        }
+
+        return clr;
+    }
+
+    PixelOutput MainPs( PixelInput i )
+    {
+        PixelOutput o;
+        o.vColor.rgb = Samples(g_vCameraPositionWs, i.vPositionWithOffsetWs + g_vHighPrecisionLightingOffsetWs );
+        return o;
+    }
+}
