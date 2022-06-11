@@ -24,7 +24,7 @@ namespace Sandbox
 		[Event.Tick.Server]
 		public void Tick()
 		{
-			Position = Vector3.Forward * 0;
+			Position = Vector3.Forward * 32;
 			Rotation = Rotation.FromRoll( 60 );
 		}
 
@@ -44,7 +44,7 @@ namespace Sandbox
 				Vector2 size = 128.0f;
 
 				SceneObject.Attributes.Set( "radius", radius );
-				SceneObject.Attributes.Set( "origin", Transform.Position + Transform.Rotation.Down * offset );
+				SceneObject.Attributes.Set( "offset", offset );
 				SceneObject.Attributes.Set( "screenres", new Vector4( size.x, size.y, scale, scale ) );
 			}
 		}
