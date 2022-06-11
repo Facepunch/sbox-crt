@@ -45,8 +45,6 @@ namespace Sandbox
 
 				SceneObject.Attributes.Set( "radius", radius );
 				SceneObject.Attributes.Set( "origin", Transform.Position + Transform.Rotation.Down * offset );
-				SceneObject.Attributes.Set( "right", Transform.Rotation.Forward );
-				SceneObject.Attributes.Set( "up", Transform.Rotation.Right );
 				SceneObject.Attributes.Set( "screenres", new Vector4( size.x, size.y, scale, scale ) );
 			}
 		}

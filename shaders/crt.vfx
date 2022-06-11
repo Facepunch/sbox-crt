@@ -58,8 +58,6 @@ PS
     float g_flChromaticAberration< Default( 1.0f ); Range( 0.0f, 1.0f ); UiGroup( "CRT" ); >;
     float g_flRadius< Default( 1.0f ); UiGroup( "CRT" ); >;
     float3 g_vOrigin< Default3( 0.0f, 0.0f, 0.0f ); UiGroup( "CRT" ); >;
-    float3 g_vRight< Default3( 0.0f, 1.0f, 0.0f ); UiGroup( "CRT" ); >;
-    float3 g_vUp< Default3( 0.0f, 0.0f, 1.0f ); UiGroup( "CRT" ); >;
 
     CreateInputTexture2D( Color, Srgb, 8, "", "_color", "CRT", Default4( 1.0f, 1.0f, 1.0f, 1.0f ) );
     CreateTexture2D( g_tColor ) < Channel( RGBA, None( Color ), Srgb ); OutputFormat( BC7 ); SrgbRead( true ); >;
@@ -71,7 +69,7 @@ PS
     {
         return lerp( Tex2D( g_tPixelTexture, uv * g_vScreenRes.xy ).rgb * g_flPixelBrightness, float3( 1, 1, 1 ), fade );
     }
-    
+
     float3 FindSphereProjectionNormal( float3 v, float3 p )
     {
         float3 c = g_vOrigin;
@@ -93,12 +91,12 @@ PS
         return qd > 0 ? normalize( h - c ) : float3( 0, 0, 0 );
     }
 
-    float3 Sample( float3 v, float3 p )
+    float3 Sample( float3 tangentU, float3 tangentV, float3 v, float3 p )
     {
         float3 nml = FindSphereProjectionNormal( v, p );
 
-        float3 i = g_vRight;
-        float3 j = g_vUp;
+        float3 j = tangentU;
+        float3 i = tangentV;
 
         float2 uv = float2( dot( nml, i ), dot( nml, j ) ) * g_vScreenRes.zw * 2 + float2( 0.5f, 0.5f );
 
@@ -123,7 +121,7 @@ PS
         return fade * g_flBrightness * clr * 1.5f;
     }
 
-    float3 Samples( float3 viewPos, float3 fragPos )
+    float3 Samples( float3 tangentU, float3 tangentV, float3 viewPos, float3 fragPos )
     {
         const float3 samples[9] =
         {
@@ -145,7 +143,7 @@ PS
         for ( float s = 0; s < 9; ++s )
         {
             float3 samp = samples[s];
-            clr += Sample( viewPos, fragPos + samp.x * dx + samp.y * dy ) * samp.z;
+            clr += Sample( tangentU, tangentV, viewPos, fragPos + samp.x * dx + samp.y * dy ) * samp.z;
         }
 
         return clr;
@@ -154,7 +152,7 @@ PS
     PixelOutput MainPs( PixelInput i )
     {
         PixelOutput o;
-        o.vColor.rgb = Samples(g_vCameraPositionWs, i.vPositionWithOffsetWs + g_vHighPrecisionLightingOffsetWs );
+        o.vColor.rgb = Samples( i.vTangentUWs * -1.0f, i.vTangentVWs, g_vCameraPositionWs, i.vPositionWithOffsetWs + g_vHighPrecisionLightingOffsetWs );
         return o;
     }
 }
